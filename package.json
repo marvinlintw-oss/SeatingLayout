@@ -13,7 +13,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
-    "jspdf": "^4.1.0",
+    "jspdf": "^4.2.0",
     "konva": "^9.3.18",
     "lucide-react": "^0.475.0",
     "papaparse": "^5.5.2",

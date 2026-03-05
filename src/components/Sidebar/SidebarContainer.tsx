@@ -1,104 +1,64 @@
 // src/components/Sidebar/SidebarContainer.tsx
-import React, { useRef } from 'react';
-import { useVenueStore } from '../../store/useVenueStore';
-import { usePersonnelStore } from '../../store/usePersonnelStore';
-import { useSystemStore } from '../../store/useSystemStore';
-import { Settings2, Save, FolderOpen, ImageIcon, FileCode, FileDown } from 'lucide-react';
-
-// 引入拆解後的子面板與工具
-import { VenueEditPanel } from './VenueEditPanel';
+import React from 'react';
 import { PersonnelPanel } from './PersonnelPanel';
-import { exportProjectJSON, importProjectJSON } from '../../utils/projectIO';
+import { VenueEditPanel } from './VenueEditPanel';
+import { exportCanvas } from '../../utils/canvasExport';
+import { useVenueStore } from '../../store/useVenueStore';
+import { Users, Map, Image as ImageIcon, FileCode2, FileText } from 'lucide-react';
 
 export const SidebarContainer: React.FC = () => {
-  const { isEditMode, setEditMode, exportCanvas } = useVenueStore();
-  const projectInputRef = useRef<HTMLInputElement>(null);
-
-  const handleSaveProject = () => {
-    const projectData = {
-      version: '3.2',
-      timestamp: new Date().toISOString(),
-      personnel: usePersonnelStore.getState().personnel,
-      venue: {
-        seats: useVenueStore.getState().seats,
-        backgroundImage: useVenueStore.getState().backgroundImage,
-        stageScale: useVenueStore.getState().stageScale,
-        stagePosition: useVenueStore.getState().stagePosition
-      },
-      categories: useSystemStore.getState().categories
-    };
-    exportProjectJSON(projectData);
-  };
-
-  const handleLoadProject = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    if (window.confirm('讀取專案將會覆蓋目前所有進度，確定要繼續嗎？')) {
-      try {
-        const json = await importProjectJSON(file);
-        usePersonnelStore.setState({ personnel: json.personnel });
-        if(json.categories) useSystemStore.setState({ categories: json.categories });
-        useVenueStore.setState({
-          seats: json.venue.seats,
-          backgroundImage: json.venue.backgroundImage,
-          stageScale: json.venue.stageScale || 1,
-          stagePosition: json.venue.stagePosition || { x: 0, y: 0 },
-          history: [] 
-        });
-        usePersonnelStore.getState().syncSeatingStatus();
-      } catch (err: any) {
-        alert(err.message);
-      }
-    }
-    if (projectInputRef.current) projectInputRef.current.value = '';
-  };
+  // 【修復】廢除本地 useState，直接以大水庫的 isEditMode 作為單一真相來源 (SSOT)
+  const isEditMode = useVenueStore(state => state.isEditMode);
 
   return (
-    <div className="w-96 bg-white border-l border-slate-200 h-full flex flex-col shadow-xl z-20 shrink-0 select-none">
-      <input type="file" ref={projectInputRef} onChange={handleLoadProject} className="hidden" accept=".json" />
-
-      {/* 頂部模式切換區 */}
-      <div className="bg-slate-800 text-white p-3 flex justify-between items-center shadow-md">
-        <div className="flex items-center gap-2">
-          <Settings2 size={18} className="text-blue-400"/>
-          <span className="font-bold text-sm tracking-wide">系統模式</span>
-        </div>
-        <div className="flex bg-slate-700 rounded p-1 border border-slate-600">
-          <button 
-             onClick={() => setEditMode(false)}
-             className={`px-3 py-1 text-xs rounded transition-all font-medium ${!isEditMode ? 'bg-white text-slate-900 shadow' : 'text-slate-400 hover:text-white'}`}
-          >人員排位</button>
-          <button 
-             onClick={() => setEditMode(true)}
-             className={`px-3 py-1 text-xs rounded transition-all font-medium ${isEditMode ? 'bg-blue-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-          >場地編輯</button>
-        </div>
-      </div>
-
-      {/* 根據模式渲染不同面板 */}
-      {isEditMode ? <VenueEditPanel /> : <PersonnelPanel />}
-
-      {/* 底部共用工具列 (匯出與存檔) */}
-      <div className="p-3 border-t border-slate-200 flex gap-2 bg-slate-100 mt-auto">
-        <div className="flex-1 flex gap-1">
-           <button onClick={() => exportCanvas?.('png')} className="flex-1 bg-white border border-slate-300 text-slate-600 text-[10px] py-1 rounded hover:text-blue-600 flex items-center justify-center gap-1" title="匯出 PNG">
-              <ImageIcon size={12}/> PNG
-           </button>
-           <button onClick={() => exportCanvas?.('svg')} className="flex-1 bg-white border border-slate-300 text-slate-600 text-[10px] py-1 rounded hover:text-purple-600 flex items-center justify-center gap-1" title="匯出 SVG">
-              <FileCode size={12}/> SVG
-           </button>
-           <button onClick={() => exportCanvas?.('pdf')} className="flex-1 bg-white border border-slate-300 text-slate-600 text-[10px] py-1 rounded hover:text-red-600 flex items-center justify-center gap-1" title="匯出 PDF">
-              <FileDown size={12}/> PDF
-           </button>
-        </div>
-        <button onClick={handleSaveProject} className="bg-slate-800 text-white text-xs px-3 py-1 rounded hover:bg-slate-700 flex items-center gap-2" title="儲存專案">
-          <Save size={14} /> 存檔
+    <div className="w-80 h-full bg-white border-r border-slate-200 flex flex-col shadow-lg z-10 shrink-0">
+      
+      {/* 頂部頁籤 */}
+      <div className="flex bg-slate-800 text-slate-300 shrink-0">
+        <button
+          onClick={() => useVenueStore.setState({ isEditMode: false })}
+          className={`flex-1 py-3 text-sm font-bold flex justify-center items-center gap-2 transition-colors ${!isEditMode ? 'bg-white text-blue-600' : 'hover:bg-slate-700 hover:text-white'}`}
+        >
+          <Users size={16} /> 人員排位
         </button>
-        <button onClick={() => projectInputRef.current?.click()} className="bg-white border border-slate-300 text-slate-700 text-xs px-2 py-1 rounded hover:bg-slate-50" title="讀取專案">
-          <FolderOpen size={14} />
+        <button
+          onClick={() => useVenueStore.setState({ isEditMode: true })}
+          className={`flex-1 py-3 text-sm font-bold flex justify-center items-center gap-2 transition-colors ${isEditMode ? 'bg-white text-blue-600' : 'hover:bg-slate-700 hover:text-white'}`}
+        >
+          <Map size={16} /> 場地編輯
         </button>
       </div>
+
+      {/* 內容區塊 (滾動區) */}
+      <div className="flex-1 overflow-hidden flex flex-col relative">
+         {!isEditMode ? <PersonnelPanel /> : <VenueEditPanel />}
+      </div>
+
+      {/* 底部畫布匯出工具列 */}
+      <div className="p-3 border-t border-slate-200 bg-slate-50 flex gap-2 shrink-0">
+        <button 
+           onClick={() => exportCanvas('png')} 
+           className="flex-1 flex items-center justify-center gap-1 bg-white border border-slate-300 text-slate-600 py-1.5 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition text-xs font-bold shadow-sm"
+           title="匯出為高畫質 PNG 圖片"
+        >
+            <ImageIcon size={14}/> PNG
+        </button>
+        <button 
+           onClick={() => exportCanvas('svg')} 
+           className="flex-1 flex items-center justify-center gap-1 bg-white border border-slate-300 text-slate-600 py-1.5 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition text-xs font-bold shadow-sm"
+           title="匯出為可編輯 SVG 向量檔"
+        >
+            <FileCode2 size={14}/> SVG
+        </button>
+        <button 
+           onClick={() => exportCanvas('pdf')} 
+           className="flex-1 flex items-center justify-center gap-1 bg-red-50 border border-red-200 text-red-600 py-1.5 rounded hover:bg-red-100 transition text-xs font-bold shadow-sm"
+           title="匯出為可列印 PDF 檔案"
+        >
+            <FileText size={14}/> PDF
+        </button>
+      </div>
+      
     </div>
   );
 };

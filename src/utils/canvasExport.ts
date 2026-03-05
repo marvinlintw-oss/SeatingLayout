@@ -1,5 +1,6 @@
 // src/utils/canvasExport.ts
 import jsPDF from 'jspdf';
+import { useProjectStore } from '../store/useProjectStore';
 import type { Seat, Person, Category } from '../types';
 
 /**
@@ -55,69 +56,74 @@ const getSVGString = (
   `;
 };
 
-/** 匯出高畫質 SVG */
-export const exportCanvasToSVG = (
-  seats: Seat[], personnel: Person[], categories: Category[],
-  virtualWidth: number, virtualHeight: number, bgImage: string | null, filenamePrefix = 'seating-chart'
-) => {
-  const svgString = getSVGString(seats, personnel, categories, virtualWidth, virtualHeight, bgImage);
-  const blob = new Blob([svgString], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.download = `${filenamePrefix}-${Date.now()}.svg`;
-  link.href = url;
-  link.click();
-  URL.revokeObjectURL(url);
-};
+/**
+ * 整合版匯出工具：直接從大水庫撈取資料，並依據傳入的格式輸出
+ */
+export const exportCanvas = (format: 'svg' | 'png' | 'pdf') => {
+  const state = useProjectStore.getState();
+  const activeSession = state.sessions.find(s => s.id === state.activeSessionId);
+  
+  if (!activeSession) {
+      alert('找不到場次資料！');
+      return;
+  }
 
-/** 透過 SVG 轉存高畫質 PNG */
-export const exportCanvasToPNG = (
-  seats: Seat[], personnel: Person[], categories: Category[],
-  virtualWidth: number, virtualHeight: number, bgImage: string | null, filenamePrefix = 'seating-chart'
-) => {
-  const svgString = getSVGString(seats, personnel, categories, virtualWidth, virtualHeight, bgImage);
+  const { seats, backgroundImage } = activeSession.venue;
+  const { personnel, categories, projectName } = state;
+
+  // 動態計算畫布需要的大小 (找尋最邊緣的座位)
+  let maxX = 1600;
+  let maxY = 900;
+  if (seats.length > 0) {
+      maxX = Math.max(...seats.map(s => s.x + (s.width || 100)));
+      maxY = Math.max(...seats.map(s => s.y + (s.height || 150)));
+  }
+
+  // 加上 Padding 留白，確保圖表不會太貼齊邊緣
+  const virtualWidth = Math.max(1200, maxX + 200);
+  const virtualHeight = Math.max(800, maxY + 200);
+
+  // 智慧命名：專案名稱 + 場次名稱
+  const filenamePrefix = `${projectName}_${activeSession.name}_座位圖`;
+
+  const svgString = getSVGString(seats, personnel, categories, virtualWidth, virtualHeight, backgroundImage);
   const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = virtualWidth; canvas.height = virtualHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-          ctx.fillStyle = 'white'; ctx.fillRect(0, 0, virtualWidth, virtualHeight);
-          ctx.drawImage(img, 0, 0);
-          const link = document.createElement('a');
-          link.download = `${filenamePrefix}-${Date.now()}.png`;
-          link.href = canvas.toDataURL('image/png', 1.0);
-          link.click();
-      }
-      URL.revokeObjectURL(url);
-  };
-  img.src = url;
-};
 
-/** 透過 SVG 轉存高畫質 PDF (自動判斷直橫向) */
-export const exportCanvasToPDF = (
-  seats: Seat[], personnel: Person[], categories: Category[],
-  virtualWidth: number, virtualHeight: number, bgImage: string | null, filenamePrefix = 'seating-chart'
-) => {
-  const svgString = getSVGString(seats, personnel, categories, virtualWidth, virtualHeight, bgImage);
-  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = virtualWidth; canvas.height = virtualHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-          ctx.fillStyle = 'white'; ctx.fillRect(0, 0, virtualWidth, virtualHeight);
-          ctx.drawImage(img, 0, 0);
-          const orientation = virtualWidth > virtualHeight ? 'l' : 'p'; // 自動判斷方向
-          const pdf = new jsPDF(orientation, 'px', [virtualWidth, virtualHeight]);
-          pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, virtualWidth, virtualHeight);
-          pdf.save(`${filenamePrefix}-${Date.now()}.pdf`);
-      }
+  if (format === 'svg') {
+      const link = document.createElement('a');
+      link.download = `${filenamePrefix}.svg`;
+      link.href = url;
+      link.click();
       URL.revokeObjectURL(url);
-  };
-  img.src = url;
+  } else if (format === 'png' || format === 'pdf') {
+      const img = new Image();
+      img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = virtualWidth; 
+          canvas.height = virtualHeight;
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx) {
+              ctx.fillStyle = 'white'; 
+              ctx.fillRect(0, 0, virtualWidth, virtualHeight);
+              ctx.drawImage(img, 0, 0);
+              
+              if (format === 'png') {
+                  const link = document.createElement('a');
+                  link.download = `${filenamePrefix}.png`;
+                  link.href = canvas.toDataURL('image/png', 1.0);
+                  link.click();
+              } else if (format === 'pdf') {
+                  // 自動判斷直橫向
+                  const orientation = virtualWidth > virtualHeight ? 'l' : 'p'; 
+                  const pdf = new jsPDF(orientation, 'px', [virtualWidth, virtualHeight]);
+                  pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, virtualWidth, virtualHeight);
+                  pdf.save(`${filenamePrefix}.pdf`);
+              }
+          }
+          URL.revokeObjectURL(url);
+      };
+      img.src = url;
+  }
 };

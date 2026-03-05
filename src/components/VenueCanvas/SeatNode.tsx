@@ -1,9 +1,8 @@
 // src/components/VenueCanvas/SeatNode.tsx
 import React from 'react';
 import { Group, Rect, Text, Circle } from 'react-konva';
-import { usePersonnelStore } from '../../store/usePersonnelStore';
-import { useSystemStore } from '../../store/useSystemStore';
-import type { Seat } from '../../types';
+import { useProjectStore } from '../../store/useProjectStore'; // 【修復】只留這一個大水庫
+import type { Seat, Person } from '../../types'; // 【修復】引入 Person 型別解決 any 報錯
 import type Konva from 'konva';
 
 export const SEAT_WIDTH = 100;
@@ -23,28 +22,32 @@ interface SeatNodeProps {
   onClick: (e: Konva.KonvaEventObject<MouseEvent>, seat: Seat) => void;
   onContextMenu: (e: Konva.KonvaEventObject<PointerEvent>, seat: Seat) => void;
   onUnassign: (seatId: string) => void;
+  onTransformEnd?: (e: Konva.KonvaEventObject<Event>, seat: Seat) => void;
 }
 
 export const SeatNode: React.FC<SeatNodeProps> = ({
   seat, isSelected, isEditMode, isSequencing, rankSequenceCounter,
   isNumbering, numberSequenceCounter,
-  onDragStart, onDragMove, onDragEnd, onClick, onContextMenu, onUnassign
+  onDragStart, onDragMove, onDragEnd, onClick, onContextMenu, onUnassign, onTransformEnd
 }) => {
-  const { personnel } = usePersonnelStore();
-  const { getCategoryByLabel } = useSystemStore();
+  // 從大水庫取得資料
+  const { personnel, categories } = useProjectStore();
 
-  const occupant = personnel.find(p => p.id === seat.assignedPersonId);
-  const zoneCat = getCategoryByLabel(seat.zoneCategory || '');
-  const zoneColor = zoneCat ? zoneCat.color : '#ffffff'; 
-  const personCat = occupant ? getCategoryByLabel(occupant.category) : null;
+  // 【修復】明確宣告 p 的型別為 Person，消除 any 報錯
+  const occupant = personnel.find((p: Person) => p.id === seat.assignedPersonId);
   
-  // 【修正】將人員區塊底色 (personBg) 改為對應其類別 (category) 的專屬顏色
+  const zoneCat = categories.find(c => c.label === seat.zoneCategory);
+  const zoneColor = zoneCat ? zoneCat.color : '#ffffff'; 
+  const personCat = occupant ? categories.find(c => c.label === occupant.category) : null;
   const personBg = personCat ? personCat.color : '#ffffff';
 
   const stroke = seat.isPinned ? '#ef4444' : (isSelected ? '#2563eb' : '#94a3b8');
   const strokeWidth = isSelected ? 3 : 2;
 
   const isDraggable = (isEditMode && !seat.isPinned && !isSequencing && !isNumbering) || (!isEditMode && !!occupant);
+
+  const shapeW = Math.max(10, seat.width || 600);
+  const shapeH = Math.max(10, seat.height || 150);
 
   return (
     <Group 
@@ -56,20 +59,18 @@ export const SeatNode: React.FC<SeatNodeProps> = ({
       onDragEnd={(e) => onDragEnd(e, seat)}
       onClick={(e) => onClick(e, seat)}
       onContextMenu={(e) => onContextMenu(e, seat)}
+      onTransformEnd={(e) => onTransformEnd && onTransformEnd(e, seat)}
     >
       {seat.type === 'shape' ? (
         <Group>
-          <Rect width={seat.width} height={seat.height} fill="#e2e8f0" stroke="#94a3b8" cornerRadius={4} />
-          <Text text={seat.label} width={seat.width} align="center" y={(seat.height||0)/2 - 10} fontSize={24} fill="#64748b"/>
+          <Rect width={shapeW} height={shapeH} fill="#e2e8f0" stroke="#94a3b8" cornerRadius={4} />
+          <Text text={seat.label} width={shapeW} align="center" y={shapeH/2 - 10} fontSize={24} fill="#64748b"/>
         </Group>
       ) : (
         <Group>
           <Rect width={SEAT_WIDTH} height={SEAT_HEIGHT} fill={zoneColor} stroke={stroke} strokeWidth={strokeWidth} cornerRadius={4} shadowColor="black" shadowOpacity={0.1} shadowBlur={5} />
-          
           <Rect x={0} y={0} width={SEAT_WIDTH} height={25} fill="rgba(0,0,0,0.1)" cornerRadius={[4,4,0,0]} stroke={stroke} strokeWidth={0}/>
           <Text text={seat.label} x={0} y={6} width={SEAT_WIDTH} align="center" fontSize={12} fontStyle="bold" fill="#1e293b"/>
-          
-          {/* 【修正】此處套用 personBg 作為下半部底色 */}
           <Rect x={0} y={25} width={SEAT_WIDTH} height={SEAT_HEIGHT-25} fill={personBg} cornerRadius={[0,0,4,4]} />
           
           {occupant ? (

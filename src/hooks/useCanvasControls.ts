@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type Konva from 'konva';
 import { useVenueStore } from '../store/useVenueStore';
+import { useProjectStore } from '../store/useProjectStore';
 import type { Seat } from '../types';
 
 interface CanvasControlsOptions {
@@ -17,12 +18,16 @@ interface CanvasControlsOptions {
 export const useCanvasControls = ({
   containerRef, placingBatch, setMouseGridPos, setSelectionRect, selectionRect, clearContextMenu, GRID_SIZE
 }: CanvasControlsOptions) => {
-  const { isEditMode, setStageScale, setStagePosition, addToSelection, clearSelection, seats } = useVenueStore();
+  const { isEditMode, setStageScale, setStagePosition, addToSelection, clearSelection } = useVenueStore();
+  const { sessions, activeSessionId } = useProjectStore();
 
   const [isPanning, setIsPanning] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const isSelecting = useRef(false);
   const selectStartPos = useRef({ x: 0, y: 0 });
+
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const seats = activeSession?.venue.seats || [];
 
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -58,11 +63,9 @@ export const useCanvasControls = ({
         }
         return;
       }
-
       if (isEditMode && e.evt.ctrlKey) return; 
-
       if (!e.evt.shiftKey && !e.evt.ctrlKey) {
-        clearSelection(); // 點擊空白處清空選取
+        clearSelection();
         setIsPanning(true);
         setLastMousePos({ x: e.evt.clientX, y: e.evt.clientY });
         if(containerRef.current) containerRef.current.style.cursor = 'grab';
@@ -111,7 +114,6 @@ export const useCanvasControls = ({
     if (containerRef.current) containerRef.current.style.cursor = isEditMode ? 'crosshair' : 'default';
 
     if (isSelecting.current && selectionRect) {
-       // 全範圍覆蓋判定
        const selected = seats.filter((s: Seat) => 
           s.isVisible !== false && s.type !== 'shape' &&
           s.x >= selectionRect.x &&
